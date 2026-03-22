@@ -10,6 +10,8 @@ import requests
 from datetime import datetime
 from colorama import Fore, Style, init
 import socket
+# Set master socket timeout to prevent ADB from deadlocking
+socket.setdefaulttimeout(15)
 
 import sys
 import threading
@@ -517,6 +519,9 @@ class adb():
         adb = AdbClient()
         dv = adb.device(devicsX)
         if not dv:
+            print(f"\\n\\033[91m[BOT {bot_num}] ERROR: Could not connect to {devicsX}. Stopping thread.\\033[0m\\n")
+            globals()[f'sw_emu{bot_num}'] = False
+            time.sleep(5)
             return
         # สร้าง Thread สำหรับตรวจสอบ Retry/Play
         retry_play_thread = threading.Thread(target=check_retry_play, args=(dv,))
@@ -1663,15 +1668,20 @@ if __name__ == '__main__':
     MAX_EMULATORS = 50
     def get_connected_devices():
         """ฟังก์ชันตรวจสอบอุปกรณ์ที่เชื่อมต่อผ่าน ADB"""
-        result = subprocess.run(['bin/adb/adb.exe', 'devices'], stdout=subprocess.PIPE, text=True)
-        devices = []
-        for line in result.stdout.splitlines():
-            if '\tdevice' in line:
-                device_id = line.split('\t')[0]
-                # ตรวจสอบว่าไม่ใช่ 127.0.0.1:7555
-                if device_id != "127.0.0.1:7555":
-                    devices.append(device_id)
-        return devices[:MAX_EMULATORS]  # ตัดเฉพาะ 50 อันแรก
+        try:
+            result = subprocess.run(['bin/adb/adb.exe', 'devices'], stdout=subprocess.PIPE, text=True, timeout=5)
+            devices = []
+            for line in result.stdout.splitlines():
+                if '\tdevice' in line:
+                    device_id = line.split('\t')[0]
+                    # ตรวจสอบว่าไม่ใช่ 127.0.0.1:7555
+                    if device_id != "127.0.0.1:7555":
+                        devices.append(device_id)
+            return devices[:MAX_EMULATORS]  # ตัดเฉพาะ 50 อันแรก
+        except subprocess.TimeoutExpired:
+            return []
+        except Exception:
+            return []
     # ตรวจสอบการเชื่อมต่ออุปกรณ์ครั้งแรก
     emu_idpass = get_connected_devices()
     if emu_idpass:
